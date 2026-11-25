@@ -125,7 +125,7 @@ button{font:inherit;color:inherit}
 .cg{display:flex;flex-direction:column;gap:3px;min-width:0}
 .cg .gl{font-size:11px;font-weight:700;color:var(--ink-soft);letter-spacing:.05em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cg.curg .gl{color:var(--ink)}
-.cells{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
+.cells{display:grid;grid-template-columns:repeat(var(--len,3),minmax(0,1fr));gap:4px}
 .cell{background:var(--card);border:1.5px solid var(--card-line);border-radius:6px;text-align:center;padding:2px 0 3px;line-height:1.25;transition:background .15s,opacity .15s}
 .cell b{display:block;font-size:10px;font-weight:700}
 .cell i{display:block;font-style:normal;font-size:15px;font-weight:900}
@@ -176,6 +176,10 @@ button{font:inherit;color:inherit}
 .field{display:flex;flex-direction:column;gap:6px}
 .field .lbl{font-weight:700;font-size:14px;display:flex;justify-content:space-between;align-items:baseline;gap:8px}
 .field .lbl output{font-family:var(--f-mono);font-size:18px}
+.custom{display:flex;flex-direction:column;gap:8px}
+.slots{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.slots label{display:flex;flex-direction:column;gap:2px;font-size:11px;font-weight:700;color:var(--ink-soft);min-width:0}
+.slots select{width:100%;min-width:0;font:inherit;font-size:16px;font-weight:900;color:var(--ink);background:var(--card);border:1.5px solid var(--ink);border-radius:8px;padding:6px 4px}
 .hint{font-size:12px;color:var(--ink-soft);margin:0}
 input[type=range]{width:100%;accent-color:var(--you)}
 .seg{display:flex;flex-wrap:wrap;gap:6px}
@@ -202,7 +206,10 @@ input[type=range]{width:100%;accent-color:var(--you)}
   .logo{font-size:18px}
   .top{justify-content:space-between;gap:8px}
   .stats{order:3;flex-basis:100%;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px}
-  .stat{padding:2px 6px;gap:4px;justify-content:center}
+  .stat{padding:2px 4px;gap:0;flex-direction:column;align-items:center;min-width:0}
+  .stat .k{white-space:nowrap}
+  .stat .v.pips{font-size:12px;letter-spacing:0;line-height:1.8}
+  .slots{grid-template-columns:repeat(2,minmax(0,1fr))}
   .stat .v{font-size:14px}
   .app{gap:8px;padding-block:8px}
   .big{height:54px;font-size:17px}
@@ -260,17 +267,17 @@ input[type=range]{width:100%;accent-color:var(--you)}
   <form class="sheet" id="setupForm">
     <div>
       <h2>ジップザップ</h2>
-      <p class="lead">円になって「ジップ → ザップ → ゾップ」と言いながら、エネルギーを回すシアターゲームです。あなた以外はCPUが担当します。</p>
+      <p class="lead">円になって「ジップ」「ザップ」「ゾップ」と言いながら、エネルギーを回すシアターゲームです。あなた以外はCPUが担当します。</p>
     </div>
     <div>
       <h3>ルール</h3>
       <ol class="rules">
-        <li>言葉は順番固定。1手目「ジップ」、2手目「ザップ」、3手目「ゾップ」。</li>
-        <li>送り方は3手で1セット。4セット（12手）で1ローテーションです。
-          <div class="rot"><span>① 右・左・飛ばし</span><span>② 右・右・飛ばし</span><span>③ 左・右・飛ばし</span><span>④ 左・左・飛ばし</span></div>
+        <li id="ruleWords"></li>
+        <li><span id="ruleSets"></span>
+          <div class="rot" id="ruleRot"></div>
         </li>
         <li>右・左は、送る人から見た向き（円の内側を向いて）。あなたは画面下にいるので、画面の右がそのまま「右」です。</li>
-        <li>「飛ばし」は両隣以外の誰かへ。円の人をタップすると送り先を選べます。</li>
+        <li>「飛ばし」は両隣以外の誰かへ。隣の人には飛ばせません。円の人をタップすると送り先を選べます。</li>
         <li>1ローテーション終わるごとにテンポが上がります。</li>
       </ol>
     </div>
@@ -278,6 +285,19 @@ input[type=range]{width:100%;accent-color:var(--you)}
     <div class="field">
       <div class="lbl"><label for="fN">人数（あなたを含む）</label><output id="oN">8人</output></div>
       <input type="range" id="fN" min="4" max="12" step="1" value="8">
+    </div>
+
+    <div class="field">
+      <div class="lbl">言葉のローテーション</div>
+      <div class="seg" role="radiogroup" aria-label="言葉のローテーション">
+        <label><input type="radio" name="seqMode" id="qBasic" value="basic"><span>基本（3つ）</span></label>
+        <label><input type="radio" name="seqMode" id="qCustom" value="custom"><span>カスタム（4つ）</span></label>
+      </div>
+      <div class="custom" id="customBox" hidden>
+        <div class="slots" id="slots"></div>
+        <div class="rot" id="customRot"></div>
+        <p class="hint">同じ言葉を何度選んでもOK。ジップとザップはセットごとに右・左が変わり、ゾップはいつも飛ばしです。</p>
+      </div>
     </div>
 
     <div class="field">
@@ -376,11 +396,18 @@ const store={
   get(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}},
   set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
 };
-const cfg=Object.assign({n:8,mode:'retry',lives:3,speed:'normal',cpu:'mid',hard:false,hint:true,sound:true,voice:false},store.get('zipzap.cfg',{}));
+const cfg=Object.assign({n:8,mode:'retry',lives:3,speed:'normal',cpu:'mid',seqMode:'basic',custom:[1,2,0,1],hard:false,hint:true,sound:true,voice:false},store.get('zipzap.cfg',{}));
 if(cfg.speed==='slow')cfg.speed='easy';
 if(cfg.speed==='fast')cfg.speed='hard';
 if(!SPEEDS[cfg.speed])cfg.speed='normal';
 if(!CPU_ERR[cfg.cpu])cfg.cpu='mid';
+if(!Array.isArray(cfg.custom)||cfg.custom.length!==4||cfg.custom.some(w=>![0,1,2].includes(w)))cfg.custom=[1,2,0,1];
+// one set = the words in seq(); each word's move comes from the current set's pattern (index 0/1/2 = ジップ/ザップ/ゾップ)
+const seq=()=>cfg.seqMode==='custom'?cfg.custom:[0,1,2];
+const total=()=>seq().length*PATTERNS.length;
+const setOf=step=>Math.floor(step/seq().length);
+const wordIdx=step=>seq()[step%seq().length];
+const moveAt=step=>PATTERNS[setOf(step)][wordIdx(step)];
 const pick=a=>a[Math.floor(Math.random()*a.length)];
 const shuffle=a=>{for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a};
 
@@ -412,15 +439,28 @@ const stage=$('#stage'),ballEl=$('#ball'),calloutEl=$('#callout'),subEl=$('#sub'
 let seatEls={};
 
 function buildCue(){
-  const cue=$('#cue');cue.innerHTML='';
+  const cue=$('#cue'),q=seq();cue.innerHTML='';cue.style.setProperty('--len',q.length);
   PATTERNS.forEach((p,g)=>{
     const div=document.createElement('div');div.className='cg';div.dataset.g=g;
-    div.innerHTML=`<div class="gl">${g+1}. ${PNAMES[g]}</div><div class="cells">`+
-      p.map((m,i)=>`<div class="cell" data-s="${g*3+i}" data-w="${i}"><b>${WORDS[i]}</b><i>${MOVE_JA[m]==='飛ばし'?'飛':MOVE_JA[m]}</i></div>`).join('')+`</div>`;
+    const short=w=>p[w]==='S'?'飛':MOVE_JA[p[w]];
+    const name=cfg.seqMode==='custom'?q.map(short).join(''):PNAMES[g];
+    div.innerHTML=`<div class="gl">${g+1}. ${name}</div><div class="cells">`+
+      q.map((w,i)=>`<div class="cell" data-s="${g*q.length+i}" data-w="${w}"><b>${WORDS[w]}</b><i>${short(w)}</i></div>`).join('')+`</div>`;
     cue.appendChild(div);
   });
 }
-buildCue();
+function renderRules(){
+  const q=seq(),rot=PATTERNS.map((p,g)=>`<span>${'①②③④'[g]} ${q.map(w=>MOVE_JA[p[w]]).join('・')}</span>`).join('');
+  $('#ruleWords').textContent=`言葉は「${q.map(w=>WORDS[w]).join(' → ')}」の順で固定。`;
+  $('#ruleSets').textContent=`送り方は${q.length}手で1セット。4セット（${total()}手）で1ローテーションです。`;
+  $('#ruleRot').innerHTML=rot;$('#customRot').innerHTML=rot;
+  $('#customBox').hidden=cfg.seqMode!=='custom';
+}
+function renderSlots(){
+  $('#slots').innerHTML=cfg.custom.map((w,i)=>`<label>${i+1}つ目<select id="slot${i}">${WORDS.map((n,v)=>`<option value="${v}"${v===w?' selected':''}>${n}</option>`).join('')}</select></label>`).join('');
+  cfg.custom.forEach((_,i)=>$('#slot'+i).addEventListener('change',e=>{cfg.custom[i]=+e.target.value;seqChanged()}));
+}
+function seqChanged(){store.set('zipzap.cfg',cfg);renderRules();previewIfIdle()}
 
 /* ---------- game state ---------- */
 let G=null;
@@ -429,9 +469,9 @@ const idx=id=>G.order.indexOf(id);
 const rightOf=id=>{const n=G.order.length;return G.order[(idx(id)+1)%n]};
 const leftOf=id=>{const n=G.order.length;return G.order[(idx(id)-1+n)%n]};
 const skipTargets=id=>{const r=rightOf(id),l=leftOf(id);return G.order.filter(x=>x!==id&&x!==r&&x!==l)};
-const expMove=()=>PATTERNS[Math.floor(G.step/3)][G.step%3];
-const expWord=()=>WORDS[G.step%3];
-const bestKey=()=>`zipzap.best.${cfg.mode}.${cfg.speed}.${cfg.cpu}`;
+const expMove=()=>moveAt(G.step);
+const expWord=()=>WORDS[wordIdx(G.step)];
+const bestKey=()=>`zipzap.best.${cfg.mode}.${cfg.speed}.${cfg.cpu}`+(cfg.seqMode==='custom'?'.'+cfg.custom.join(''):'');
 
 function seatPos(id){
   const k=idx(id);
@@ -489,7 +529,7 @@ function travel(toPos,t,cb){
   }
   requestAnimationFrame(f);
   // rAF can stall when the page is in the background; finish the pass anyway
-  setTimeout(()=>{if(!done)f(t0+d)},d+80);
+  setTimeout(()=>{if(!done)f(t0+d+1)},d+80);
 }
 function later(ms,t,fn){setTimeout(()=>{if(G&&!G.over&&!G.paused&&G.turnId===t)fn()},ms)}
 
@@ -512,7 +552,7 @@ function updateCue(){
   cue.querySelectorAll('.cell').forEach(c=>{
     const s=+c.dataset.s;c.classList.toggle('cur',G&&s===G.step);c.classList.toggle('done',G&&s<G.step);
   });
-  cue.querySelectorAll('.cg').forEach(g=>g.classList.toggle('curg',G&&+g.dataset.g===Math.floor(G.step/3)));
+  cue.querySelectorAll('.cg').forEach(g=>g.classList.toggle('curg',G&&+g.dataset.g===setOf(G.step)));
 }
 function updateHUD(){
   $('#sRot').textContent=G.rot;
@@ -545,8 +585,8 @@ function newGame(start){
   G={players,order:players.map(p=>p.id),step:0,holder:1+Math.floor(Math.random()*(cfg.n-1)),
      tempo:SPEEDS[cfg.speed].tempo,rot:0,combo:0,best:0,moves:0,lives:cfg.lives,
      turnId:0,awaiting:false,word:null,paused:false,over:!start,pendingEnd:null,ball:{x:50,y:50}};
-  buildSeats();layout();setBall(seatPos(G.holder));markHolder();updateHUD();updateCue();renderWords();
-  setCallout('ジップ',0);subEl.textContent='';setMsg('');
+  buildCue();buildSeats();layout();setBall(seatPos(G.holder));markHolder();updateHUD();updateCue();renderWords();
+  setCallout(expWord(),wordIdx(0));subEl.textContent='';setMsg('');
   if(!start)return;
   const t=++G.turnId;
   setCallout('3');subEl.textContent=`${P(G.holder).name}からスタート`;
@@ -579,7 +619,8 @@ function cpuAct(){
   if(Math.random()<err){
     const r=Math.random();
     if(r<.2){fault(id,'固まって送れなかった');return}
-    if(r<.45){
+    // on a skip turn a CPU never sends to a neighbour, even by mistake: it says the wrong word instead
+    if(r<.45||exp==='S'){
       const ww=pick(WORDS.filter(x=>x!==w)),to=targetFor(exp,id);
       say(id,ww,exp);travel(seatPos(to),t,()=>fault(id,`「${w}」の番で「${ww}」と言った`));return;
     }
@@ -608,7 +649,7 @@ function youAct(move,target){
 function success(to){
   G.holder=to;G.combo++;if(G.combo>G.best)G.best=G.combo;
   G.step++;
-  if(G.step>=12){
+  if(G.step>=total()){
     G.step=0;G.rot++;const sp=SPEEDS[cfg.speed];G.tempo=Math.max(sp.min,G.tempo*sp.accel);
     setMsg(`${G.rot}ローテーション完了・テンポアップ`,'ok');
     tone(660,.09,'triangle',.05);tone(990,.14,'triangle',.05,0,.08);
@@ -643,7 +684,7 @@ function fault(id,reason){
   later(1700,t,()=>{
     if(G.pendingEnd)return endGame(G.pendingEnd);
     markHolder();
-    setMsg(`${P(next).name}から、ローテーションの最初（ジップ・右）からやり直し`);
+    setMsg(`${P(next).name}から、ローテーションの最初（${expWord()}・${MOVE_JA[expMove()]}）からやり直し`);
     travel(seatPos(next),t,()=>later(Math.max(450,G.tempo*.6),t,beginTurn));
   });
 }
@@ -654,7 +695,7 @@ function endGame(kind){
   if(G.best>prev)store.set(bestKey(),G.best);
   let title,lead;
   if(kind==='win'){title='生き残り！';lead=`残り${G.order.length}人まで残りました。最後まで円に立っていたのは、あなたと${G.order.filter(x=>x!==0).map(x=>P(x).name).join('・')}です。`}
-  else if(kind==='out'){const rank=G.order.length+1;title=`${rank}位で脱落`;lead=`${cfg.n}人中${rank}位。あと${G.order.length-3}人抜ければ生き残りでした。`}
+  else if(kind==='out'){const rank=G.order.length+1;title=`${rank}位で脱落`;lead=`${cfg.n}人中${rank}位。あと${G.order.length-2}人抜ければ生き残りでした。`}
   else{title='ゲームオーバー';lead=G.best>prev&&G.best>0?`自己ベスト更新！ ${G.best}連続でつなぎました。`:`ライフがなくなりました。これまでのベストは${Math.max(prev,G.best)}連続です。`}
   $('#rTitle').textContent=title;$('#rLead').textContent=lead;
   $('#rRot').textContent=G.rot;$('#rBest').textContent=G.best;$('#rMoves').textContent=G.moves;
@@ -715,6 +756,7 @@ const form=$('#setupForm');
 function syncForm(){
   $('#fN').value=cfg.n;$('#oN').textContent=cfg.n+'人';
   (cfg.mode==='elim'?$('#mElim'):$('#mRetry')).checked=true;
+  (cfg.seqMode==='custom'?$('#qCustom'):$('#qBasic')).checked=true;renderSlots();renderRules();
   renderSeg('#speedSeg','speed',SPEEDS,'speed','#speedHint');
   renderSeg('#cpuSeg','cpu',CPU_ERR,'cpu','#cpuHint');
   $('#cHard').checked=cfg.hard;$('#cHint').checked=cfg.hint;$('#cSound').checked=cfg.sound;$('#cVoice').checked=cfg.voice;
@@ -736,6 +778,7 @@ function renderLives(){
 }
 $('#fN').addEventListener('input',e=>{cfg.n=+e.target.value;$('#oN').textContent=cfg.n+'人';previewIfIdle()});
 form.querySelectorAll('input[name=mode]').forEach(r=>r.addEventListener('change',()=>{cfg.mode=r.value;renderLives();previewIfIdle()}));
+form.querySelectorAll('input[name=seqMode]').forEach(r=>r.addEventListener('change',()=>{cfg.seqMode=r.value;seqChanged()}));
 function renderSeg(sel,name,table,key,hintSel){
   const seg=$(sel);seg.innerHTML='';
   Object.entries(table).forEach(([v,o])=>{
